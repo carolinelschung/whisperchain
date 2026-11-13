@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Never commit keys or databases
+*.db
+*.sqlite3
+*.pem
+*.key
+keys/
