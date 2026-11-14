@@ -18,8 +18,8 @@ Jordan has more time Friday. Caroline has more time Saturday and Sunday. So:
 
 ## Jordan's track (front-loaded Friday)
 
-- [ ] **J1 Repo setup.** GitHub repo, add Caroline, folders `server/ client/ docs/ tests/ samples/`, `requirements.txt` (fastapi, uvicorn, cryptography, httpx, pytest), `.gitignore` (keys, `*.db`). *Needs: nothing. Do first, so Caroline can clone.*
-- [ ] **J2 API contract** in `docs/design.md`. *Needs: J1.*
+- [X] **J1 Repo setup.** GitHub repo, add Caroline, folders `server/ client/ docs/ tests/ samples/`, `requirements.txt` (fastapi, uvicorn, cryptography, httpx, pytest), `.gitignore` (keys, `*.db`). *Needs: nothing. Do first, so Caroline can clone.*
+- [X] **J2 API contract** in `docs/design.md`. *Needs: J1.*
   - `POST /register` (username, password, role, public_key)
   - `POST /login` -> session token
   - `POST /token/issue` (Sender) -> random token
@@ -29,9 +29,9 @@ Jordan has more time Friday. Caroline has more time Saturday and Sunday. So:
   - `GET /moderation/queue`, `POST /moderation/freeze/{message_id}` (Moderator)
   - `GET /audit` (Moderator full; Admin meta-events only)
   - `GET /users/{name}/pubkey`
-- [ ] **J3 RBAC matrix + role descriptions** in `docs/rbac_matrix.md`. *Needs: J2.* Rules: Sender requests a token and sends; Recipient reads own inbox and flags; Moderator sees flagged content, freezes tokens, views logs; Admin manages users/roles/keys and never sees content or sender. Caroline implements the server checks from this table.
+- [X] **J3 RBAC matrix + role descriptions** in `docs/rbac_matrix.md`. *Needs: J2.* Rules: Sender requests a token and sends; Recipient reads own inbox and flags; Moderator sees flagged content, freezes tokens, views logs; Admin manages users/roles/keys and never sees content or sender. Caroline implements the server checks from this table.
 - [ ] **J4 Threat model draft** in `docs/threat_model.md` (table: threat / defense / residual risk). Cover: compromised admin, shared or stolen token, nonrepudiation, deanonymization by metadata/timing, spam/flooding, log tampering, false flagging. *Needs: J2.*
-- [ ] **J5 Crypto module** `client/crypto.py` + `tests/test_crypto.py`. *Needs: J1.* Functions: `generate_keypair()`, save/load private key (password-protected PEM), `encrypt_message(plaintext, recipient_pubkey)` -> ciphertext, wrapped_key, nonce (AES-256-GCM + RSA-OAEP key wrap), `decrypt_message(...)`. Tests: roundtrip works, wrong key fails, tampered ciphertext fails.
+- [X] **J5 Crypto module** `client/crypto.py` + `tests/test_crypto.py`. *Needs: J1.* Functions: `generate_keypair()`, save/load private key (password-protected PEM), `encrypt_message(plaintext, recipient_pubkey)` -> ciphertext, wrapped_key, nonce (AES-256-GCM + RSA-OAEP key wrap), `decrypt_message(...)`. Tests: roundtrip works, wrong key fails, tampered ciphertext fails.
 - [ ] **J6 Audit chain module** `server/audit_chain.py` + tests. *Needs: J1.* `append(entry)` computes `entry_hash = SHA-256(prev_hash + entry)`, signs it with a system Ed25519 key, stores it. `verify_chain()` returns the first bad entry. Pure functions over a list or DB connection so Caroline can call it. Tests: edit a row, verify fails.
 - [ ] **J7 CLI client** `client/cli.py` calling the J2 endpoints with `httpx` (register, login, token, send, inbox, flag, moderate, audit). *Needs: J5 and Caroline's server running (C4+). Can start with the contract and fix when the server lands.*
 - [ ] **J8 `demo.py`** scripted full story ending with a tamper demo; save output to `samples/audit_log_sample.json`. *Needs: J7 and C6.*
