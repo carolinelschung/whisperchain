@@ -52,6 +52,7 @@ POST /token/issue
 ## Messages
 POST /messages
 - access: sender
+- **cc note: propose changing this to "anyone holding a valid token, no login". If the server checks the sender's login or role, it learns who sent each message, which would break anonymity**
 - submit an anonymous, encrypted message
 - sender provides their token and server checks that token is valid, unspent, and not frozen
 - server verifies recipient exists, mark token as spent
@@ -122,4 +123,4 @@ POST /admin/round/advance
 - POST /moderation/freeze/{message_id}: only works on a flagged message. The token is already spent by then, so freezing records the abuse and does not block anyone (see the report).
 - POST /logout is built as listed above: any logged-in user, deletes only the session whose token was sent.
 - Not built (no endpoint): GET /users, PUT /users/{username}/pubkey.
-- GET /audit and GET /audit/verify: not built yet. Moderators will see the full log and admins will see meta-events only.
+- GET /audit and GET /audit/verify: not built yet. Moderator only, as in the list above. Admins get no audit view.

@@ -10,8 +10,8 @@ from server.db import get_conn
 permission_dict = dict()
 permission_dict["Sender"] = ["request_token"]
 permission_dict["Recipient"] = ["read_inbox", "flag_message"]
-permission_dict["Moderator"] = ["view_flag_queue", "freeze_token", "view_audit_full", "view_audit_meta"]
-permission_dict["Admin"] = ["assign_roles", "advance_round", "view_audit_meta"]
+permission_dict["Moderator"] = ["view_flag_queue", "freeze_token", "view_audit_log"]
+permission_dict["Admin"] = ["assign_roles", "advance_round"]
 
 # ---------- functions ----------
 # Hash a session token so the database never holds a usable token.
