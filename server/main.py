@@ -41,11 +41,17 @@ class LoginRequest(BaseModel):
 
 
 class MessageRequest(BaseModel):
-    token: str          # the anonymous token from /token/issue
-    recipient: str      # username of who the message is for
-    ciphertext: str     # the encrypted message (the server can't read it)
-    wrapped_key: str    # the message's key, encrypted with the recipient's public key
+    token: str                      # the anonymous token from /token/issue
+    recipient: str                  # username of who the message is for
+    ciphertext: str                 # the encrypted message (the server can't read it)
+    wrapped_key: str                # the message's key, encrypted with the recipient's public key
     nonce: str
+
+# the same message, re-encrypted by the recipient's client for the Moderator
+class FlagRequest(BaseModel):
+    mod_ciphertext: str
+    mod_wrapped_key: str
+    mod_nonce: str
 
 
 # ---------- endpoints ----------
@@ -204,3 +210,90 @@ def get_inbox(authorization: str = Header(default=None)):
             "round_id": row["round_id"],
         })
     return messages
+
+
+@app.get("/moderation/pubkey")
+def get_moderator_pubkey(authorization: str = Header(default=None)):
+    # any logged-in user may ask, since recipients need it to flag a message
+    get_current_user(authorization)
+
+    # with several Moderators we just use the one with the lowest id
+    conn = get_conn()
+    moderator = conn.execute(
+        "SELECT u.public_key FROM users u JOIN user_roles r ON r.user_id = u.id "
+        "WHERE r.role = 'Moderator' ORDER BY u.id LIMIT 1"
+    ).fetchone()
+    conn.close()
+    if moderator is None:
+        raise HTTPException(status_code=404, detail="no moderator exists")
+    return {"public_key": moderator["public_key"]}
+
+
+@app.post("/messages/{message_id}/flag")
+def flag_message(message_id: str, req: FlagRequest, authorization: str = Header(default=None)):
+    # only a Recipient may flag
+    user = require_permission(authorization, "flag_message")
+
+    # the message must exist AND be addressed to the caller. one error for both cases
+    conn = get_conn()
+    message = conn.execute(
+        "SELECT id FROM messages WHERE id = ? AND recipient_id = ?", (message_id, user["id"])
+    ).fetchone()
+    if message is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="no such message")
+
+    # message_id is the primary key of flags, so flagging the same message twice fails here
+    try:
+        conn.execute(
+            "INSERT INTO flags (message_id, mod_ciphertext, mod_wrapped_key, mod_nonce) VALUES (?, ?, ?, ?)",
+            (message_id, req.mod_ciphertext, req.mod_wrapped_key, req.mod_nonce),
+        )
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise HTTPException(status_code=409, detail="already flagged")
+
+    conn.execute("UPDATE messages SET flagged = 1 WHERE id = ?", (message_id,))
+    conn.commit()
+    conn.close()
+    return {"flagged": message_id}
+
+
+@app.get("/moderation/queue")
+def get_flag_queue(authorization: str = Header(default=None)):
+    # only a Moderator may see flagged messages
+    require_permission(authorization, "view_flag_queue")
+
+    conn = get_conn()
+    rows = conn.execute("SELECT message_id, mod_ciphertext, mod_wrapped_key, mod_nonce FROM flags").fetchall()
+    conn.close()
+
+    queue = []
+    for row in rows:
+        queue.append({
+            "message_id": row["message_id"],
+            "mod_ciphertext": row["mod_ciphertext"],
+            "mod_wrapped_key": row["mod_wrapped_key"],
+            "mod_nonce": row["mod_nonce"],
+        })
+    return queue
+
+
+@app.post("/moderation/freeze/{message_id}")
+def freeze_token(message_id: str, authorization: str = Header(default=None)):
+    # only a Moderator may freeze a token
+    require_permission(authorization, "freeze_token")
+
+    # only flagged messages can be frozen, since those are the only ones a Moderator sees
+    conn = get_conn()
+    message = conn.execute("SELECT token_hash FROM messages WHERE id = ? AND flagged = 1", (message_id,)).fetchone()
+    if message is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="no such flagged message")
+
+    # mark that message's token as frozen.
+    # (the token is already spent, so this is a record of abuse, not a block. see the report)
+    conn.execute("UPDATE valid_tokens SET frozen = 1 WHERE token_hash = ?", (message["token_hash"],))
+    conn.commit()
+    conn.close()
+    return {"frozen": message_id}

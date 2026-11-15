@@ -71,6 +71,15 @@ def init_db():
             token_hash TEXT NOT NULL,
             flagged INTEGER NOT NULL DEFAULT 0
         );
+
+        -- one row per flagged message (message_id is the primary key, so it can only be flagged once).
+        -- holds a copy of the message encrypted for the Moderator, which only the Moderator can read
+        CREATE TABLE IF NOT EXISTS flags (
+            message_id TEXT PRIMARY KEY,
+            mod_ciphertext TEXT NOT NULL,
+            mod_wrapped_key TEXT NOT NULL,
+            mod_nonce TEXT NOT NULL
+        );
     """)
     conn.commit()
     conn.close()
