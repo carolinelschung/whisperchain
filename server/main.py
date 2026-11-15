@@ -9,6 +9,7 @@ import sqlite3
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
+from server.audit import check_log, log_event, read_log
 from server.db import get_conn, init_db
 from server.rbac import get_current_user, hash_token, require_permission
 
@@ -48,11 +49,11 @@ class MessageRequest(BaseModel):
     wrapped_key: str                # the message's key, encrypted with the recipient's public key
     nonce: str
 
-# the same message, re-encrypted by the recipient's client for the Moderator
 class RolesRequest(BaseModel):
     roles: list[str]
 
 
+# the same message, re-encrypted by the recipient's client for the Moderator
 class FlagRequest(BaseModel):
     mod_ciphertext: str
     mod_wrapped_key: str
@@ -88,6 +89,8 @@ def register(req: RegisterRequest):
     for role in roles:
         conn.execute("INSERT INTO user_roles (user_id, role) VALUES (?, ?)", (cur.lastrowid, role))
     
+    # log the event with the roles chosen, but not the username
+    log_event(conn, "user_registered", ",".join(sorted(roles)))
     conn.commit()
     conn.close()
     return {"username": req.username, "roles": sorted(roles)}
@@ -98,18 +101,29 @@ def login(req: LoginRequest):
     conn = get_conn()
     user = conn.execute("SELECT * FROM users WHERE username = ?", (req.username,)).fetchone()
 
-    # same 401 error for "no such user" and "wrong password" so nobody can guess usernames
+    # same 401 error for "no such user" and "wrong password" so nobody can guess usernames.
+    # a failed login is logged with no username and no role, so both cases look the same
     if user is None:
+        log_event(conn, "login_failed", "unknown")
+        conn.commit()
         conn.close()
         raise HTTPException(status_code=401, detail="bad username or password")
     attempt = hash_password(req.password, user["salt"])
     if not hmac.compare_digest(attempt, user["password_hash"]):
+        log_event(conn, "login_failed", "unknown")
+        conn.commit()
         conn.close()
         raise HTTPException(status_code=401, detail="bad username or password")
 
     # login worked: make a random session token, save its hash, give the token to the client
     token = secrets.token_hex(32)
     conn.execute("INSERT INTO sessions (token_hash, user_id) VALUES (?, ?)", (hash_token(token), user["id"]))
+
+    # log the event with the account's roles, but not the username
+    role_names = []
+    for row in conn.execute("SELECT role FROM user_roles WHERE user_id = ?", (user["id"],)):
+        role_names.append(row["role"])
+    log_event(conn, "login_succeeded", ",".join(sorted(role_names)))
     conn.commit()
     conn.close()
     return {"session_token": token}
@@ -145,6 +159,7 @@ def issue_token(authorization: str = Header(default=None)):
     # make the token and save only its hash. this row has no user id, so it can't be linked back
     token = secrets.token_hex(32)
     conn.execute("INSERT INTO valid_tokens (token_hash, round_id) VALUES (?, ?)", (hash_token(token), round_id))
+    log_event(conn, "token_issued", "Sender")
     conn.commit()
     conn.close()
     return {"token": token, "round_id": round_id}
@@ -187,6 +202,8 @@ def send_message(req: MessageRequest):
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
         (message_id, recipient["id"], req.ciphertext, req.wrapped_key, req.nonce, round_id, token_hash),
     )
+    # no login here, so the role is recorded as a sender token being used, nothing more
+    log_event(conn, "message_sent", "Sender (token)", {"message_id": message_id})
     conn.commit()
     conn.close()
     return {"message_id": message_id}
@@ -259,6 +276,7 @@ def flag_message(message_id: str, req: FlagRequest, authorization: str = Header(
         raise HTTPException(status_code=409, detail="already flagged")
 
     conn.execute("UPDATE messages SET flagged = 1 WHERE id = ?", (message_id,))
+    log_event(conn, "message_flagged", "Recipient", {"message_id": message_id})
     conn.commit()
     conn.close()
     return {"flagged": message_id}
@@ -299,6 +317,7 @@ def freeze_token(message_id: str, authorization: str = Header(default=None)):
     # mark that message's token as frozen.
     # (the token is already spent, so this is a record of abuse, not a block. see the report)
     conn.execute("UPDATE valid_tokens SET frozen = 1 WHERE token_hash = ?", (message["token_hash"],))
+    log_event(conn, "token_frozen", "Moderator", {"message_id": message_id})
     conn.commit()
     conn.close()
     return {"frozen": message_id}
@@ -330,6 +349,8 @@ def assign_roles(username: str, req: RolesRequest, authorization: str = Header(d
     conn.execute("DELETE FROM user_roles WHERE user_id = ?", (user["id"],))
     for role in roles:
         conn.execute("INSERT INTO user_roles (user_id, role) VALUES (?, ?)", (user["id"], role))
+    # log the new roles only, not whose roles they are
+    log_event(conn, "roles_changed", "Admin", {"new_roles": sorted(roles)})
     conn.commit()
     conn.close()
     return {"username": username, "roles": sorted(roles)}
@@ -343,8 +364,9 @@ def advance_round(authorization: str = Header(default=None)):
     # old tokens stop working (send_message checks the round), and Senders can get new ones
     conn = get_conn()
     conn.execute("UPDATE current_round SET round_id = round_id + 1 WHERE id = 1")
-    conn.commit()
     round_id = conn.execute("SELECT round_id FROM current_round WHERE id = 1").fetchone()["round_id"]
+    log_event(conn, "round_advanced", "Admin", {"round_id": round_id})
+    conn.commit()
     conn.close()
     return {"round_id": round_id}
 
@@ -352,13 +374,39 @@ def advance_round(authorization: str = Header(default=None)):
 @app.post("/logout")
 def logout(authorization: str = Header(default=None)):
     # must be logged in. this also checks the header is in the "Bearer <token>" form
-    get_current_user(authorization)
+    user = get_current_user(authorization)
 
     # delete this one session. the same token won't work again, but the user's other
     # sessions (for example a login on another computer) are left alone
     token = authorization[len("Bearer "):]
     conn = get_conn()
     conn.execute("DELETE FROM sessions WHERE token_hash = ?", (hash_token(token),))
+    log_event(conn, "logout", ",".join(sorted(user["roles"])))
     conn.commit()
     conn.close()
     return {"logged_out": True}
+
+
+@app.get("/audit")
+def get_audit_log(authorization: str = Header(default=None)):
+    # only a Moderator may read the audit log
+    require_permission(authorization, "view_audit_log")
+
+    conn = get_conn()
+    records = read_log(conn)
+    conn.close()
+    return records
+
+
+@app.get("/audit/verify")
+def verify_audit_log(authorization: str = Header(default=None)):
+    # only a Moderator may run the check
+    require_permission(authorization, "view_audit_log")
+
+    # check_log gives back None if the log is intact, or the log_id of the first bad record
+    conn = get_conn()
+    bad_log_id = check_log(conn)
+    conn.close()
+    if bad_log_id is None:
+        return {"ok": True}
+    return {"ok": False, "first_bad_log_id": bad_log_id}

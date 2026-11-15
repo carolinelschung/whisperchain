@@ -80,6 +80,17 @@ def init_db():
             mod_wrapped_key TEXT NOT NULL,
             mod_nonce TEXT NOT NULL
         );
+
+        -- the tamper-evident audit log, one row per event. entry is the event as JSON text
+        -- (time, action, role only, never who). each row is hashed with the previous row's hash
+        -- and signed, so changing or removing a row breaks the chain
+        CREATE TABLE IF NOT EXISTS audit_log (
+            log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entry TEXT NOT NULL,
+            prev_hash TEXT NOT NULL,
+            entry_hash TEXT NOT NULL,
+            signature TEXT NOT NULL
+        );
     """)
     conn.commit()
     conn.close()
