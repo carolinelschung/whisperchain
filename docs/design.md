@@ -116,11 +116,37 @@ POST /admin/round/advance
 - moves everyone on to the next round and returns the new round number
 - unspent tokens from the old round stop working, and Senders can request a new token
 
+GET /audit 
+- access: moderator only (admins get no audit view, but idk if this is right)
+- returns every log record, oldest first, as a list of {log_id, entry, prev_hash, entry_hash, signature}
+- entry is {event, timestamp, role} plus an optional details field. It never holds a username, user id or IP address
+- timestamp is Hanover, NH time
+- signature is hex text
+
+GET /audit/verify
+- access: moderator only
+- checks the whole log: every record's hash, every link to the previous record, and every signature (made with the system's key)
+- returns {"ok": true}, or {"ok": false, "first_bad_log_id": x} for the first record that fails
+
+### What gets logged (role is recorded, never who)
+- user_registered: roles chosen
+- login_succeeded: the account's roles
+- login_failed: role "unknown" (no username, so a failed attempt can't be tied to a name)
+- logout: the account's roles
+- token_issued: Sender
+- message_sent: "Sender (token)", with details {message_id}
+- message_flagged: Recipient, with details {message_id}
+- token_frozen: Moderator, with details {message_id}
+- roles_changed: Admin, with details {new_roles} (not whose roles)
+- round_advanced: Admin, with details {round_id}
+- Only successful actions are logged, except login_failed. A refused request (403, 404, 409) adds nothing.
+
 ### Differences from the list above
-- Role change: PATCH /users/{username}/roles (plural), since a user can hold several roles. Otherwise as in the list above.
-- POST /messages: access is by the anonymous token only, with no login header (not "access: sender"), so the server cannot tell who sent the message.
-- POST /messages/{message_id}/flag: the request body holds the three fields of the moderator copy (mod_ciphertext, mod_wrapped_key, mod_nonce).
-- POST /moderation/freeze/{message_id}: only works on a flagged message. The token is already spent by then, so freezing records the abuse and does not block anyone (see the report).
-- POST /logout is built as listed above: any logged-in user, deletes only the session whose token was sent.
+- Role change: PATCH /users/{username}/roles (plural), since a user can hold several roles
+- POST /messages: access is by the anonymous token only, with no login header (not "access: sender"), so the server cannot tell who sent the message
+- POST /messages/{message_id}/flag: the request body holds the three fields of the moderator copy (mod_ciphertext, mod_wrapped_key, mod_nonce)
+- POST /moderation/freeze/{message_id}: only works on a flagged message. The token is already spent by then, so freezing records the abuse and does not block anyone (see the report)
+- POST /logout is built as listed above: any logged-in user, deletes only the session whose token was sent
 - Not built (no endpoint): GET /users, PUT /users/{username}/pubkey.
-- GET /audit and GET /audit/verify: not built yet. Moderator only, as in the list above. Admins get no audit view.
+- GET /audit: built as listed above (moderator only). GET /audit/verify is an added endpoint.
+- Login and logout are logged (with roles only, no username)
