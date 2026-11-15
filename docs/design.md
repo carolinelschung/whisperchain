@@ -139,7 +139,11 @@ GET /audit/verify
 - token_frozen: Moderator, with details {message_id}
 - roles_changed: Admin, with details {new_roles} (not whose roles)
 - round_advanced: Admin, with details {round_id}
-- Only successful actions are logged, except login_failed. A refused request (403, 404, 409) adds nothing.
+- alert_raised: role "System", with details saying which rule fired (see below)
+
+### Alert rules (they only write an alert_raised record to the audit log; nothing is blocked automatically)
+- flags_per_round: when the number of flagged messages from the same round reaches 3, details are {rule, round_id, count}. It fires once per round (at exactly 3, not on every flag after). It counts all recipients together, not one user.
+- failed_logins: when the last 5 audit records are all login_failed, details are {rule, count}. It is system wide, and not per account, because the failed logins are logged without usernames. A successful login or any other event in between resets the streak (again because faile logins are logged without usernames), and it fires again after every further 5 failures in a row. 
 
 ### Differences from the list above
 - Role change: PATCH /users/{username}/roles (plural), since a user can hold several roles

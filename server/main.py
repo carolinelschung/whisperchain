@@ -2,6 +2,7 @@
 #   uvicorn server.main:app --reload
 import hashlib
 import hmac
+import json
 import os
 import secrets
 import sqlite3
@@ -13,12 +14,14 @@ from server.audit import check_log, log_event, read_log
 from server.db import get_conn, init_db
 from server.rbac import get_current_user, hash_token, require_permission
 
-ITERATIONS = 600_000  # PBKDF2 rounds
-SELF_REGISTER_ROLES = {"Sender", "Recipient"}  # Moderator and Admin can only be given by an Admin
+ITERATIONS = 600_000                                        # PBKDF2 rounds
+SELF_REGISTER_ROLES = {"Sender", "Recipient"}               # Moderator and Admin can only be given by an Admin
 ALL_ROLES = {"Sender", "Recipient", "Moderator", "Admin"}
+FLAG_THRESHOLD = 3                                          # this many flagged messages in one round raises an alert
+FAILED_LOGIN_THRESHOLD = 5                                  # this many failed logins in a row raises an alert
 
 app = FastAPI()
-init_db()  # make sure the tables exist when the server starts
+init_db()                                                   # make sure the tables exist when the server starts
 
 
 # ---------- helpers ----------
@@ -26,6 +29,24 @@ init_db()  # make sure the tables exist when the server starts
 def hash_password(password, salt):
     """Turn a password and salt into a hash (hex text) using PBKDF2."""
     return hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), ITERATIONS).hex()
+
+
+def log_failed_login(conn):
+    """Log a failed login, then raise an alert if the last few log records
+    are all failed logins."""
+    log_event(conn, "login_failed", "unknown")
+
+    # this connection can already see the record we just added
+    last_rows = conn.execute(
+        "SELECT entry FROM audit_log ORDER BY log_id DESC LIMIT ?", (FAILED_LOGIN_THRESHOLD,)
+    ).fetchall()
+    if len(last_rows) < FAILED_LOGIN_THRESHOLD:
+        return
+    for row in last_rows:
+        if json.loads(row["entry"])["event"] != "login_failed":
+            return  # something else happened in between, so it isn't a streak
+
+    log_event(conn, "alert_raised", "System", {"rule": "failed_logins", "count": FAILED_LOGIN_THRESHOLD})
 
 
 # ---------- what the client must send ----------
@@ -104,13 +125,13 @@ def login(req: LoginRequest):
     # same 401 error for "no such user" and "wrong password" so nobody can guess usernames.
     # a failed login is logged with no username and no role, so both cases look the same
     if user is None:
-        log_event(conn, "login_failed", "unknown")
+        log_failed_login(conn)
         conn.commit()
         conn.close()
         raise HTTPException(status_code=401, detail="bad username or password")
     attempt = hash_password(req.password, user["salt"])
     if not hmac.compare_digest(attempt, user["password_hash"]):
-        log_event(conn, "login_failed", "unknown")
+        log_failed_login(conn)
         conn.commit()
         conn.close()
         raise HTTPException(status_code=401, detail="bad username or password")
@@ -259,7 +280,7 @@ def flag_message(message_id: str, req: FlagRequest, authorization: str = Header(
     # the message must exist AND be addressed to the caller. one error for both cases
     conn = get_conn()
     message = conn.execute(
-        "SELECT id FROM messages WHERE id = ? AND recipient_id = ?", (message_id, user["id"])
+        "SELECT id, round_id FROM messages WHERE id = ? AND recipient_id = ?", (message_id, user["id"])
     ).fetchone()
     if message is None:
         conn.close()
@@ -277,6 +298,15 @@ def flag_message(message_id: str, req: FlagRequest, authorization: str = Header(
 
     conn.execute("UPDATE messages SET flagged = 1 WHERE id = ?", (message_id,))
     log_event(conn, "message_flagged", "Recipient", {"message_id": message_id})
+
+    # count the flagged messages from the same round. this one is already included.
+    # "==" and not ">=" so the alert fires once per round, not on every flag after it
+    flagged_count = conn.execute(
+        "SELECT COUNT(*) FROM messages WHERE flagged = 1 AND round_id = ?", (message["round_id"],)
+    ).fetchone()[0]
+    if flagged_count == FLAG_THRESHOLD:
+        log_event(conn, "alert_raised", "System",
+                  {"rule": "flags_per_round", "round_id": message["round_id"], "count": flagged_count})
     conn.commit()
     conn.close()
     return {"flagged": message_id}
