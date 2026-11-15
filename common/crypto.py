@@ -141,3 +141,40 @@ def decrypt_message(ciphertext, encrypted_key, nonce, private_key):
     plaintext = aesgcm.decrypt(nonce, ciphertext, None)
 
     return plaintext.decode()
+
+
+# Sign data using an RSA private key
+def sign_data(data, private_key):
+    if isinstance(private_key, (bytes, str)):
+        raise ValueError("Private key must be an RSA private key object, not bytes or string.")
+
+    signature = private_key.sign(
+        data,
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
+        hashes.SHA256()
+    )
+
+    return signature
+
+
+# Verify an RSA signature
+def verify_signature(data, signature, public_key):
+    if isinstance(public_key, (bytes, str)):
+        public_key = load_public_key(public_key)
+
+    try:
+        public_key.verify(
+            signature,
+            data,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+        return True
+    except Exception:
+        return False

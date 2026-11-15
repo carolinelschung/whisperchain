@@ -7,13 +7,15 @@
 
 from cryptography.hazmat.primitives import serialization
 
-from client.crypto import (
+from common.crypto import (
     generate_rsa_keypair,
     store_private_key,
     load_private_key,
     load_public_key,
     encrypt_message,
-    decrypt_message
+    decrypt_message,
+    sign_data,
+    verify_signature
 )
 
 def test_generate_rsa_keypair():
@@ -100,6 +102,21 @@ def test_decrypt_message():
     assert decrypted_message == message
     
 
+def test_sign_and_verify():
+    private_key, public_key = generate_rsa_keypair()
+    data = b"Important data to sign."
+
+    signature = sign_data(data, private_key)
+    assert isinstance(signature, bytes)
+
+    is_valid = verify_signature(data, signature, public_key)
+    assert is_valid
+
+    # Test with tampered data
+    tampered_data = b"Tampered data."
+    is_valid_tampered = verify_signature(tampered_data, signature, public_key)
+    assert not is_valid_tampered
+
 
 if __name__ == "__main__":
     test_generate_rsa_keypair()
@@ -109,4 +126,5 @@ if __name__ == "__main__":
     test_load_public_key_with_string()
     test_encrypt_message()
     test_decrypt_message()
+    test_sign_and_verify()
     print("All tests passed!")
