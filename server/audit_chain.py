@@ -83,7 +83,7 @@ def verify_chain(chain, public_key):
         
         # Recalculate the hash of the current entry and compare
         recalculated_hash = calculate_hash(record["prev_hash"], record["entry"])
-        if recalculated_hash != record["hash"]:
+        if recalculated_hash != record["entry_hash"]:
             return index
         
         # Verify the RSA signature
