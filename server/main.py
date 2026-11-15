@@ -14,6 +14,7 @@ from server.rbac import get_current_user, hash_token, require_permission
 
 ITERATIONS = 600_000  # PBKDF2 rounds
 SELF_REGISTER_ROLES = {"Sender", "Recipient"}  # Moderator and Admin can only be given by an Admin
+ALL_ROLES = {"Sender", "Recipient", "Moderator", "Admin"}
 
 app = FastAPI()
 init_db()  # make sure the tables exist when the server starts
@@ -48,6 +49,10 @@ class MessageRequest(BaseModel):
     nonce: str
 
 # the same message, re-encrypted by the recipient's client for the Moderator
+class RolesRequest(BaseModel):
+    roles: list[str]
+
+
 class FlagRequest(BaseModel):
     mod_ciphertext: str
     mod_wrapped_key: str
@@ -110,7 +115,7 @@ def login(req: LoginRequest):
     return {"session_token": token}
 
 
-@app.get("/round")
+@app.get("/rounds/current")
 def get_round(authorization: str = Header(default=None)):
     # any logged-in user may ask, no specific role needed
     get_current_user(authorization)
@@ -297,3 +302,63 @@ def freeze_token(message_id: str, authorization: str = Header(default=None)):
     conn.commit()
     conn.close()
     return {"frozen": message_id}
+
+
+@app.patch("/users/{username}/roles")
+def assign_roles(username: str, req: RolesRequest, authorization: str = Header(default=None)):
+    # only an Admin may change roles
+    admin = require_permission(authorization, "assign_roles")
+
+    # the list must be non-empty and only contain the four real roles
+    roles = set(req.roles)
+    if not roles or not roles <= ALL_ROLES:
+        raise HTTPException(status_code=400, detail="invalid roles")
+
+    conn = get_conn()
+    user = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    if user is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="no such user")
+
+    # an Admin can't change their own roles, so they can't quietly make themselves a Moderator
+    if user["id"] == admin["id"]:
+        conn.close()
+        raise HTTPException(status_code=403, detail="admins can't change their own roles")
+
+    # replace the old roles with the new ones. roles are read from the database on every
+    # request, so this takes effect right away
+    conn.execute("DELETE FROM user_roles WHERE user_id = ?", (user["id"],))
+    for role in roles:
+        conn.execute("INSERT INTO user_roles (user_id, role) VALUES (?, ?)", (user["id"], role))
+    conn.commit()
+    conn.close()
+    return {"username": username, "roles": sorted(roles)}
+
+
+@app.post("/admin/round/advance")
+def advance_round(authorization: str = Header(default=None)):
+    # only an Admin may move everyone on to the next round
+    require_permission(authorization, "advance_round")
+
+    # old tokens stop working (send_message checks the round), and Senders can get new ones
+    conn = get_conn()
+    conn.execute("UPDATE current_round SET round_id = round_id + 1 WHERE id = 1")
+    conn.commit()
+    round_id = conn.execute("SELECT round_id FROM current_round WHERE id = 1").fetchone()["round_id"]
+    conn.close()
+    return {"round_id": round_id}
+
+
+@app.post("/logout")
+def logout(authorization: str = Header(default=None)):
+    # must be logged in. this also checks the header is in the "Bearer <token>" form
+    get_current_user(authorization)
+
+    # delete this one session. the same token won't work again, but the user's other
+    # sessions (for example a login on another computer) are left alone
+    token = authorization[len("Bearer "):]
+    conn = get_conn()
+    conn.execute("DELETE FROM sessions WHERE token_hash = ?", (hash_token(token),))
+    conn.commit()
+    conn.close()
+    return {"logged_out": True}

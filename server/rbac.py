@@ -6,17 +6,12 @@ from fastapi import HTTPException
 from server.db import get_conn
 
 # ---------- permission dictionary ----------
-# each role maps to the actions only that role may do based on docs/rbac_matrix.md.
-# not listed here on purpose:
-#   register, log in      - nobody is logged in yet, so there is no role to check
-#   get round, get keys   - any logged-in user may do these, so no specific role is needed
-#   submit message        - allowed by the anonymous token, not by a role or login
-# if an action isn't listed for a role, that role is denied (deny by default).
+# each role maps to the actions only that role may do based on docs/rbac_matrix.md
 permission_dict = dict()
 permission_dict["Sender"] = ["request_token"]
 permission_dict["Recipient"] = ["read_inbox", "flag_message"]
 permission_dict["Moderator"] = ["view_flag_queue", "freeze_token", "view_audit_full", "view_audit_meta"]
-permission_dict["Admin"] = ["assign_roles", "view_audit_meta"]
+permission_dict["Admin"] = ["assign_roles", "advance_round", "view_audit_meta"]
 
 # ---------- functions ----------
 # Hash a session token so the database never holds a usable token.
