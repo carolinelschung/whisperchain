@@ -145,6 +145,12 @@ GET /audit/verify
 - flags_per_round: when the number of flagged messages from the same round reaches 3, details are {rule, round_id, count}. It fires once per round (at exactly 3, not on every flag after). It counts all recipients together, not one user.
 - failed_logins: when the last 5 audit records are all login_failed, details are {rule, count}. It is system wide, and not per account, because the failed logins are logged without usernames. A successful login or any other event in between resets the streak (again because faile logins are logged without usernames), and it fires again after every further 5 failures in a row. 
 
+GET /users/{username}/pubkey
+- access: any logged-in user (built as listed above)
+- returns {username, public_key} so a Sender can encrypt a message to that Recipient
+- 404 unless the user exists and has the Recipient role (so Admin accounts, which have no real key, are not returned)
+- not written to the audit log
+
 ### Differences from the list above
 - Role change: PATCH /users/{username}/roles (plural), since a user can hold several roles
 - POST /messages: access is by the anonymous token only, with no login header (not "access: sender"), so the server cannot tell who sent the message

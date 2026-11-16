@@ -272,6 +272,24 @@ def get_moderator_pubkey(authorization: str = Header(default=None)):
     return {"public_key": moderator["public_key"]}
 
 
+@app.get("/users/{username}/pubkey")
+def get_user_pubkey(username: str, authorization: str = Header(default=None)):
+    # any logged-in user may ask, since senders need it to encrypt a message
+    get_current_user(authorization)
+
+    # only users with the Recipient role can receive messages, so only they can be looked up
+    conn = get_conn()
+    user = conn.execute(
+        "SELECT u.username, u.public_key FROM users u JOIN user_roles r ON r.user_id = u.id "
+        "WHERE u.username = ? AND r.role = 'Recipient'",
+        (username,),
+    ).fetchone()
+    conn.close()
+    if user is None:
+        raise HTTPException(status_code=404, detail="no such recipient")
+    return {"username": user["username"], "public_key": user["public_key"]}
+
+
 @app.post("/messages/{message_id}/flag")
 def flag_message(message_id: str, req: FlagRequest, authorization: str = Header(default=None)):
     # only a Recipient may flag
