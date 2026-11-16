@@ -252,28 +252,16 @@ if __name__ == "__main__":
     try:
         # Log in as Moderator
         api.login(
-            username="moderator1",
-            password="your-secure-password-here"
+            username="admin1",
+            password="thisismytestadminpassword"
         )
-        print("Moderator login successful!")
+        print("Admin login successful!")
 
-        # 1. Get moderation queue
-        queue = api.get_moderation_queue()
-        print("\nModeration queue:")
-        print(queue)
-
-        # 2. Retrieve audit log
-        audit_log = api.get_audit_log()
-        print("\nAudit log retrieved!")
-        print("Number of records:", len(audit_log))
-
-        # 3. Verify audit log
-        verification = api.verify_audit_log()
-        print("\nAudit verification:")
-        print(verification)
+        result = api.change_user_roles("jordan", ["Sender", "Recipient", "Moderator"])
+        print("Role change response:", result)
 
         api.logout()
-        print("\nModerator logout successful!")
+        print("Admin logout successful!")
 
   
     except Exception as e:
