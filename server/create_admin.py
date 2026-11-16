@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives import serialization
 
 from common.crypto import generate_rsa_keypair, store_private_key
 from server.db import get_conn, init_db
-from server.main import hash_password
+from server.passwords import hash_password
 
 username, password, role = sys.argv[1], sys.argv[2], sys.argv[3]
 

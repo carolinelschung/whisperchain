@@ -1,6 +1,5 @@
 # main.py - the WhisperChain+ server. Run from the project folder with:
 #   uvicorn server.main:app --reload
-import hashlib
 import hmac
 import json
 import os
@@ -12,9 +11,9 @@ from pydantic import BaseModel
 
 from server.audit import check_log, log_event, read_log
 from server.db import get_conn, init_db
+from server.passwords import hash_password
 from server.rbac import get_current_user, hash_token, require_permission
 
-ITERATIONS = 600_000                                        # PBKDF2 rounds
 SELF_REGISTER_ROLES = {"Sender", "Recipient"}               # Moderator and Admin can only be given by an Admin
 ALL_ROLES = {"Sender", "Recipient", "Moderator", "Admin"}
 FLAG_THRESHOLD = 3                                          # this many flagged messages in one round raises an alert
@@ -25,11 +24,6 @@ init_db()                                                   # make sure the tabl
 
 
 # ---------- helpers ----------
-
-def hash_password(password, salt):
-    """Turn a password and salt into a hash (hex text) using PBKDF2."""
-    return hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), ITERATIONS).hex()
-
 
 def log_failed_login(conn):
     """Log a failed login, then raise an alert if the last few log records
