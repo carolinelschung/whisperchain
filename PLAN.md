@@ -28,7 +28,7 @@ Jordan has more time Friday. Caroline has more time Saturday and Sunday. So:
   - `POST /messages/{id}/flag` (Recipient; includes content re-encrypted to the moderator public key)
   - `GET /moderation/queue`, `POST /moderation/freeze/{message_id}` (Moderator)
   - `GET /audit` (Moderator full; Admin meta-events only)
-  - `GET /users/{name}/pubkey` (built in `server/main.py`, tests in `tests/test_pubkey.py`; Jordan's CLI `send` (J7) calls it to get the recipient's key before encrypting)
+  - `GET /users/{name}/pubkey` (built in `server/main.py`, tests in `tests/test_rbac.py`; Jordan's CLI `send` (J7) calls it to get the recipient's key before encrypting)
 - [X] **J3 RBAC matrix + role descriptions** in `docs/rbac_matrix.md`. *Needs: J2.* Rules: Sender requests a token and sends; Recipient reads own inbox and flags; Moderator sees flagged content, freezes tokens, views logs; Admin manages users/roles/keys and never sees content or sender. Caroline implements the server checks from this table.
 - [ ] **J4 Threat model draft** in `docs/threat_model.md` (table: threat / defense / residual risk). Cover: compromised admin, shared or stolen token, nonrepudiation, deanonymization by metadata/timing, spam/flooding, log tampering, false flagging. *Needs: J2.*
 - [X] **J5 Crypto module** `common/crypto.py` + `tests/test_crypto.py`. *Needs: J1.* Functions: `generate_keypair()`, save/load private key (password-protected PEM), `encrypt_message(plaintext, recipient_pubkey)` -> ciphertext, wrapped_key, nonce (AES-256-GCM + RSA-OAEP key wrap), `decrypt_message(...)`. Tests: roundtrip works, wrong key fails, tampered ciphertext fails.
@@ -45,7 +45,7 @@ Jordan has more time Friday. Caroline has more time Saturday and Sunday. So:
 - [X] **C4 Token issue + message submit + inbox.** Implements the simplified token scheme above. Messages stored with no sender field: random id, recipient, ciphertext, wrapped_key, nonce, round. Inbox returns only the caller's messages. *Needs: C3.*
 - [X] **C5 Audit logging.** Call Jordan's J6 `append` from every state-changing endpoint, with time, action, role only. No username or IP. *Needs: C3 and J6.*
 - [X] **C6 Flagging, moderator queue, freeze, alert rule.** Flag stores the moderator-encrypted copy. Freeze marks the message's token frozen so it's rejected on submit. Alert (logged) when flags in a round exceed a threshold (e.g. 3) or one token is flagged twice. *Needs: C4, C5.*
-- [ ] **C7 RBAC + privacy tests** (`tests/test_rbac.py`): each role is denied what it shouldn't do; admin gets 403 on content; double-spend token rejected; frozen token rejected; wrong recipient can't read an inbox message; DB dump has no readable content or sender. *Needs: C6.*
+- [X] **C7 RBAC + privacy tests** (`tests/test_rbac.py`): each role is denied what it shouldn't do; admin gets 403 on content; double-spend token rejected; frozen token rejected; wrong recipient can't read an inbox message; DB dump has no readable content or sender. *Needs: C6.*
 - [ ] **C8 Sample log analysis** (half page: what the log shows, what it deliberately doesn't). *Needs: J8.*
 - [ ] **C9 Security design report (3-5 pages)**: architecture, crypto choices and why, RBAC, privacy vs accountability, limitations. Jordan reviews. *Needs: C6.*
 - [ ] **C10 Final threat model.** Update J4 with what was built and the residual risks. Jordan reviews. *Needs: C6.*
