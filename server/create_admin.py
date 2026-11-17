@@ -19,12 +19,12 @@ if len(password) < 15:
     sys.exit("password must be at least 15 characters")
 
 # a Moderator needs a real keypair, because recipients encrypt flagged messages to its public key.
-# the private key is saved to keys/<username>.pem, protected by the account password.
+# the private key is saved to keys/<username>_private.pem, protected by the account password.
 # an Admin never decrypts anything, so a placeholder is enough
 if role == "Moderator":
     private_key, public_key = generate_rsa_keypair()
     os.makedirs("keys", exist_ok=True)
-    store_private_key(private_key, password, f"keys/{username}.pem")
+    store_private_key(private_key, password, f"keys/{username}_private.pem")
     public_key_text = public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
