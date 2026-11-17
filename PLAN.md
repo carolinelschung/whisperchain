@@ -46,8 +46,8 @@ Jordan has more time Friday. Caroline has more time Saturday and Sunday. So:
 - [X] **C5 Audit logging.** Call Jordan's J6 `append` from every state-changing endpoint, with time, action, role only. No username or IP. *Needs: C3 and J6.*
 - [X] **C6 Flagging, moderator queue, freeze, alert rule.** Flag stores the moderator-encrypted copy. Freeze marks the message's token frozen so it's rejected on submit. Alert (logged) when flags in a round exceed a threshold (e.g. 3) or one token is flagged twice. *Needs: C4, C5.*
 - [X] **C7 RBAC + privacy tests** (`tests/test_rbac.py`): each role is denied what it shouldn't do; admin gets 403 on content; double-spend token rejected; frozen token rejected; wrong recipient can't read an inbox message; DB dump has no readable content or sender. *Needs: C6.*
-- [ ] **C8 Sample log analysis** (half page: what the log shows, what it deliberately doesn't). *Needs: J8.*
-- [ ] **C9 Security design report (3-5 pages)**: architecture, crypto choices and why, RBAC, privacy vs accountability, limitations. Jordan reviews. *Needs: C6.*
+- [X] **C8 Sample log analysis** (half page: what the log shows, what it deliberately doesn't). *Needs: J8.*
+- [X] **C9 Security design report (3-5 pages)**: architecture, crypto choices and why, RBAC, privacy vs accountability, limitations. Jordan reviews. *Needs: C6.*
 - [ ] **C10 Final threat model.** Update J4 with what was built and the residual risks. Jordan reviews. *Needs: C6.*
 
 ---
