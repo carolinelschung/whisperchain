@@ -155,6 +155,72 @@ class APIClient:
 
         return response["public_key"]
     
+    # Send a message to a recipient, encrypting it with their public key and using an anonymous token
+    def send_message(self, recipient, message):
+        # Get the recipient's public key
+        recipient_public_key = self.get_recipient_public_key(recipient)
+
+        # Request an anonymous token
+        token_response = self.request_token()
+        anonymous_token = token_response["token"]
+
+        # Encrypt the message using the recipient's public key
+        ciphertext, encrypted_key, nonce = encrypt_message(message, recipient_public_key)
+
+        # Convert encrypted bytes into Base64 strings for JSON
+        ciphertext_text = base64.b64encode(ciphertext).decode()
+        wrapped_key_text = base64.b64encode(encrypted_key).decode()
+        nonce_text = base64.b64encode(nonce).decode()
+
+        # Submit the message using only the anonymous token
+        response = self.request(
+            "POST",
+            "/messages",
+            authenticated=False,    # don't want to use the session token for this request, only the anonymous token (for anonymity)
+            json={
+                "token": anonymous_token,
+                "recipient": recipient,
+                "ciphertext": ciphertext_text,
+                "wrapped_key": wrapped_key_text,
+                "nonce": nonce_text
+            }
+        )
+
+        return response
+    
+
+    # Read the user's inbox, decrypting each message with their private key
+    def read_inbox(self, username, key_password):
+        # Retrieve encrypted messages from the server
+        messages = self.get_inbox()
+
+        # Load recipient's private key
+        private_key = self.load_my_private_key(username, key_password)
+
+        # Decrypt each message locally
+        for message in messages:
+            try: 
+                ciphertext = base64.b64decode(message["ciphertext"])
+                wrapped_key = base64.b64decode(message["wrapped_key"])
+                nonce = base64.b64decode(message["nonce"])
+
+                plaintext = decrypt_message(ciphertext, wrapped_key, nonce, private_key)
+
+                print(f"\nMessage ID: {message['message_id']}")
+                print(f"Round: {message['round_id']}")
+                print(f"Message: {plaintext}")
+            except Exception as e:
+                print(f"\nCould not decrypt message {message['message_id']}.")
+                print(f"Round: {message['round_id']}")
+                print(f"Reason: {e}")
+
+        return messages
+
+
+    # Get a recipient's public key from the server
+    def get_recipient_public_key(self, username):
+        response = self.request("GET", f"/users/{username}/pubkey")
+        return response["public_key"]
 
     # Flag a message for moderation by sending the encrypted message to the moderator
     def flag_message(self, message_id, message_text):
@@ -250,18 +316,11 @@ class APIClient:
 if __name__ == "__main__":
     api = APIClient()
     try:
-        # Log in as Moderator
-        api.login(
-            username="admin1",
-            password="thisismytestadminpassword"
-        )
-        print("Admin login successful!")
 
-        result = api.change_user_roles("jordan", ["Sender", "Recipient", "Moderator"])
-        print("Role change response:", result)
+        api.login("jordan", "testpasswordjordan")
 
-        api.logout()
-        print("Admin logout successful!")
+        # Retrieve and decrypt messages
+        api.read_inbox("jordan", "privatekeypassword")
 
   
     except Exception as e:
