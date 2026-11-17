@@ -10,6 +10,7 @@ import os
 from cryptography.hazmat.primitives import serialization
 from common.crypto import generate_rsa_keypair, store_private_key, load_private_key, encrypt_message, decrypt_message
 import base64
+import getpass
 
 BASE_URL = "http://localhost:8000"
 
@@ -128,6 +129,15 @@ class APIClient:
         )
 
         return private_key
+    
+
+    # Decrypt a message using the recipient's or moderator's private key
+    def decrypt_message_fields(self, ciphertext, encrypted_key, nonce, private_key):
+        ciphertext = base64.b64decode(ciphertext)
+        wrapped_key = base64.b64decode(encrypted_key)
+        nonce = base64.b64decode(nonce)
+
+        return decrypt_message(ciphertext, wrapped_key, nonce, private_key)
 
 
     # Get the current round number from the server
@@ -165,11 +175,11 @@ class APIClient:
         anonymous_token = token_response["token"]
 
         # Encrypt the message using the recipient's public key
-        ciphertext, encrypted_key, nonce = encrypt_message(message, recipient_public_key)
+        ciphertext, wrapped_key, nonce = encrypt_message(message, recipient_public_key)
 
         # Convert encrypted bytes into Base64 strings for JSON
         ciphertext_text = base64.b64encode(ciphertext).decode()
-        wrapped_key_text = base64.b64encode(encrypted_key).decode()
+        wrapped_key_text = base64.b64encode(wrapped_key).decode()
         nonce_text = base64.b64encode(nonce).decode()
 
         # Submit the message using only the anonymous token
@@ -200,11 +210,12 @@ class APIClient:
         # Decrypt each message locally
         for message in messages:
             try: 
-                ciphertext = base64.b64decode(message["ciphertext"])
-                wrapped_key = base64.b64decode(message["wrapped_key"])
-                nonce = base64.b64decode(message["nonce"])
-
-                plaintext = decrypt_message(ciphertext, wrapped_key, nonce, private_key)
+                plaintext = self.decrypt_message_fields(
+                    message["ciphertext"],
+                    message["wrapped_key"],
+                    message["nonce"],
+                    private_key
+                )
 
                 print(f"\nMessage ID: {message['message_id']}")
                 print(f"Round: {message['round_id']}")
@@ -228,7 +239,7 @@ class APIClient:
         moderator_public_key = self.get_moderator_public_key()
 
         # Encrypt the message for the Moderator
-        ciphertext, encrypted_key, nonce = encrypt_message(
+        ciphertext, wrapped_key, nonce = encrypt_message(
             message_text,
             moderator_public_key
         )
@@ -239,7 +250,7 @@ class APIClient:
             f"/messages/{message_id}/flag",
             json={
                 "mod_ciphertext": base64.b64encode(ciphertext).decode(),
-                "mod_wrapped_key": base64.b64encode(encrypted_key).decode(),
+                "mod_wrapped_key": base64.b64encode(wrapped_key).decode(),
                 "mod_nonce": base64.b64encode(nonce).decode()
             }
         )
@@ -247,15 +258,41 @@ class APIClient:
         return response
 
     
+ 
+    
+
+    # MODERATOR FUNCTIONALITY
+
     # Get the moderation queue from the server
     def get_moderation_queue(self):
         return self.request(
             "GET",
             "/moderation/queue"
         )
-    
 
-    # MODERATOR FUNCTIONALITY
+
+    # Retrieve and decrypt flagged messages as a moderator
+    def read_moderation_queue(self, username, key_password):
+        messages = self.get_moderation_queue()
+        private_key = self.load_my_private_key(username, key_password)
+
+        for message in messages:
+            try:
+                plaintext = self.decrypt_message_fields(
+                    message["mod_ciphertext"],
+                    message["mod_wrapped_key"],
+                    message["mod_nonce"],
+                    private_key
+                )
+
+                print(f"\nMessage ID: {message['message_id']}")
+                print(f"Flagged message: {plaintext}")
+
+            except Exception as e:
+                print(f"Could not decrypt message.")
+
+        return messages
+
 
     # Freeze a flagged message to prevent it from being sent to the recipient (moderator)
     def freeze_message(self, message_id):
@@ -272,6 +309,31 @@ class APIClient:
             "/audit"
         )
     
+
+    # Display the audit log in a human-readable format
+    def display_audit_log(self):
+        records = self.get_audit_log()
+
+        print("\n========== AUDIT LOG ==========")
+
+        for record in records:
+            entry = record["entry"]
+
+            print(f"\nLog Entry #{record['log_id']}")
+            print(f"Event: {entry['event'].replace('_', ' ').title()}")
+            print(f"Role: {entry['role']}")
+            print(f"Time: {entry['timestamp']}")
+
+            details = entry.get("details")
+            if details:
+                print("Details:")
+                for key, value in details.items():
+                    print(f"  {key.replace('_', ' ').title()}: {value}")
+
+            print("-" * 35)
+
+        print("========== END AUDIT LOG ==========")
+
 
     # Verify the integrity of the audit log by checking the hashes and signatures of the entries (moderator)
     def verify_audit_log(self):
@@ -315,5 +377,80 @@ class APIClient:
 
 if __name__ == "__main__":
     api = APIClient()
+
+    print("\n=== WhisperChain ===")
+    username = input("Username: ")
+    password = getpass.getpass("Password: ")
+
+    try:
+        api.login(username, password)
+        print("\nLogin successful!")
+
+        while True:
+            print("\n--- Menu ---")
+            print("2. Send message")
+            print("3. Read inbox")
+            print("4. Flag a message")
+            print("5. View moderation queue")
+            print("6. Freeze a message")
+            print("7. View audit log")
+            print("8. Verify audit log")
+            print("9. Advance round")
+            print("0. Logout and exit")
+
+            choice = input("Choose an option: ").strip()
+
+            if choice == "2":
+                recipient = input("Recipient username: ")
+                message = input("Message: ")
+                result = api.send_message(recipient, message)
+                print("Message sent successfully!")
+                print(result)
+
+            elif choice == "3":
+                api.read_inbox(username, getpass.getpass("Private-key password: "))
+
+            elif choice == "4":
+                message_id = input("Message ID to flag: ")
+                message_text = input("Message text to send to moderator: ")
+                api.flag_message(message_id, message_text)
+
+            elif choice == "5":
+                api.read_moderation_queue(
+                    username,
+                    getpass.getpass("Private-key password: ")
+                )
+
+            elif choice == "6":
+                message_id = input("Message ID to freeze: ")
+                api.freeze_message(message_id)
+
+            elif choice == "7":
+                api.display_audit_log()
+
+            elif choice == "8":
+                result = api.verify_audit_log()
+
+                if result["ok"]:
+                    print("\nAudit log verification successful.")
+                    print("All entries are intact. No tampering detected.")
+                else:
+                    print("\nWARNING: Audit log verification failed!")
+                    print(f"First invalid entry: {result['first_bad_log_id']}")
+                    print("The audit log may have been altered.")
+
+            elif choice == "9":
+                print(api.advance_round())
+
+            elif choice == "0":
+                api.logout()
+                print("Logged out.")
+                break
+
+            else:
+                print("Invalid option.")
+
+    except Exception as e:
+        print(f"Error: {e}")
 
     api.close()
