@@ -1,5 +1,7 @@
 # helpers.py - small functions the server tests share (test_rbac.py).
 # conftest.py holds the pytest functions, this file holds the plain helper functions.
+import base64
+
 from cryptography.hazmat.primitives import serialization
 
 from common.crypto import encrypt_message, generate_rsa_keypair
@@ -68,6 +70,12 @@ def make_user(client, username, roles):
     return login(client, username), private_key
 
 
+# Turn encrypted bytes into text for sending. The client (client/client.py) uses Base64 for the
+# ciphertext, wrapped key and nonce, so the tests do too
+def to_text(data):
+    return base64.b64encode(data).decode()
+
+
 # Encrypt plaintext for the recipient and post it to /messages (no login header, token only).
 # Returns the response
 def send_message(client, token, recipient_public_key, recipient, plaintext):
@@ -75,7 +83,7 @@ def send_message(client, token, recipient_public_key, recipient, plaintext):
     return client.post("/messages", json={
         "token": token,
         "recipient": recipient,
-        "ciphertext": ciphertext.hex(),
-        "wrapped_key": wrapped_key.hex(),
-        "nonce": nonce.hex(),
+        "ciphertext": to_text(ciphertext),
+        "wrapped_key": to_text(wrapped_key),
+        "nonce": to_text(nonce),
     })

@@ -4,7 +4,7 @@ import pytest
 
 import server.db
 from common.crypto import encrypt_message
-from helpers import PASSWORD, login, make_admin, make_moderator, make_user, register, send_message, set_roles
+from helpers import PASSWORD, login, make_admin, make_moderator, make_user, register, send_message, set_roles, to_text
 from server.db import get_conn
 from server.rbac import hash_token
 
@@ -198,7 +198,7 @@ def flagged_flow(client, full_flow):
     mod_key = client.get("/moderation/pubkey", headers=full_flow["recipient"]).json()["public_key"]
     ciphertext, wrapped_key, nonce = encrypt_message(full_flow["plaintext"], mod_key)
     res = client.post(f"/messages/{full_flow['message_id']}/flag", headers=full_flow["recipient"], json={
-        "mod_ciphertext": ciphertext.hex(), "mod_wrapped_key": wrapped_key.hex(), "mod_nonce": nonce.hex(),
+        "mod_ciphertext": to_text(ciphertext), "mod_wrapped_key": to_text(wrapped_key), "mod_nonce": to_text(nonce),
     })
     assert res.status_code == 200
 

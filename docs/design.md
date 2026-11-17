@@ -155,6 +155,7 @@ GET /users/{username}/pubkey
 - Role change: PATCH /users/{username}/roles (plural), since a user can hold several roles
 - POST /messages: access is by the anonymous token only, with no login header (not "access: sender"), so the server cannot tell who sent the message
 - POST /messages/{message_id}/flag: the request body holds the three fields of the moderator copy (mod_ciphertext, mod_wrapped_key, mod_nonce)
+- Encoding: the encrypted fields (ciphertext, wrapped_key, nonce, and the three mod_ fields) are Base64 text, which is what the client sends. The server only stores them and never decodes them. The audit log signature is hex text.
 - POST /moderation/freeze/{message_id}: only works on a flagged message. The token is already spent by then, so freezing records the abuse and does not block anyone (see the report)
 - POST /logout is built as listed above: any logged-in user, deletes only the session whose token was sent
 - Not built (no endpoint): GET /users, PUT /users/{username}/pubkey.
