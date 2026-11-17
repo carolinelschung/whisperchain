@@ -315,15 +315,5 @@ class APIClient:
 
 if __name__ == "__main__":
     api = APIClient()
-    try:
-
-        api.login("jordan", "testpasswordjordan")
-
-        # Retrieve and decrypt messages
-        api.read_inbox("jordan", "privatekeypassword")
-
-  
-    except Exception as e:
-        print(f"Registration failed: {e}")
 
     api.close()
