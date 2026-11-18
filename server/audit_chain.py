@@ -7,8 +7,6 @@
 # hash chains for audit logs: https://dev.to/robertatkinson3570/the-architecture-behind-tamper-proof-audit-logs-56ek, https://dev.to/veritaschain/building-a-tamper-evident-audit-log-with-sha-256-hash-chains-zero-dependencies-h0b 
 # JSON: https://docs.python.org/3/library/json.html
 # hasing: https://docs.python.org/3/library/hashlib.html 
-# NOTE: will need to generate public-private keypair for the system when server is initialized
-# using generate_rsa_keypair functionality in common/crypto !!
 
 import hashlib
 import json
