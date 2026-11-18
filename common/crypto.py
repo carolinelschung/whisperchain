@@ -1,3 +1,8 @@
+# crypto.py - cryptographic utilities for WhisperChain, including RSA keypair
+# generation, password-protected PEM private-key storage and loading, AES-256-GCM
+# message encryption and decryption, RSA-OAEP encryption of AES keys, and RSA-PSS
+# digital signing and signature verification.
+#
 # sources: 
 # RSA cryptography: https://cryptography.io/en/latest/hazmat/primitives/asymmetric/rsa/
 # PEM key storage: https://cryptography.io/en/latest/hazmat/primitives/asymmetric/serialization/ 

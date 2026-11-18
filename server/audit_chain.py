@@ -1,3 +1,8 @@
+# audit_chain.py - implements a tamper-evident audit log using SHA-256 hash
+# chaining and RSA digital signatures. Handles audit entry serialization, hash
+# calculation, appending signed entries to the chain, and verification of hash
+# links, entry integrity, and digital signatures.
+# 
 # Sources:
 # hash chains for audit logs: https://dev.to/robertatkinson3570/the-architecture-behind-tamper-proof-audit-logs-56ek, https://dev.to/veritaschain/building-a-tamper-evident-audit-log-with-sha-256-hash-chains-zero-dependencies-h0b 
 # JSON: https://docs.python.org/3/library/json.html

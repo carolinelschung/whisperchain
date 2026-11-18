@@ -1,5 +1,10 @@
+# # client.py - client-side API interface for communicating with the WhisperChain server.
+# Handles user registration and authentication, RSA key management, anonymous encrypted
+# messaging, inbox retrieval and decryption, message flagging, moderation, token freezing,
+# audit log display and verification, and administrative operations.
+#
 # Run in main folder with: python -m client.client
-
+#
 # Sources:
 # httpx: https://www.python-httpx.org/ 
 # bearer authentication: https://swagger.io/docs/specification/v3_0/authentication/bearer-authentication/
